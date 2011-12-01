@@ -12,6 +12,12 @@ if (port_index > -1) {
 
 atomizeServer.create(server, '[/]atomize');
 
+// The following is an example showing how the AtomizeJS client can be
+// used from within the NodeJS Atomize server. The code here is no
+// different from normal client-side AtomizeJS code. Indeed, this
+// particular code forms a further client to work with the
+// test/retry.html example.
+
 var atomize = atomizeServer.atomize;
 
 function onchange (old) {
@@ -29,6 +35,8 @@ function onchange (old) {
 }
 
 onchange(undefined);
+
+// Now start up the server.
 
 console.log(" [*] Listening on 0.0.0.0:" + port);
 server.listen(port, '0.0.0.0');
