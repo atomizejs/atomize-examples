@@ -60,8 +60,8 @@ function reading() {
     );
 }
 
-cont = function (result) {
-    if (result === true) {
+cont = function (writer) {
+    if (writer) {
         setTimeout("writing();", 1000/60);
     } else {
         setTimeout("reading();", 1000/60);
@@ -73,17 +73,16 @@ function start() {
         if (undefined === atomize.root.obj ||
             undefined === atomize.root.obj.x) {
             atomize.root.obj = atomize.lift({x: 1});
-            obj = atomize.root.obj;
-            return true;
+            return {writer: true, obj: atomize.root.obj};
         } else {
-            obj = atomize.root.obj;
-            return false;
+            return {writer: false, obj: atomize.root.obj};
         }
     }, function (result) {
-        if (result) {
+        obj = result.obj;
+        if (result.writer) {
             expectedWrite = 2;
         }
-        cont(result);
+        cont(result.writer);
     });
 }
 
