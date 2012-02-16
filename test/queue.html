@@ -11,7 +11,7 @@ var writer;
 var next = 0;
 var value;
 
-var atomize = new Atomize("http://localhost:9999/atomize");
+var atomize;
 
 function write() {
     enqueue(next, function (e) { next += 1; loop(); });
@@ -46,6 +46,7 @@ function debug() {
 }
 
 function start() {
+    atomize = new Atomize("http://localhost:9999/atomize");
     atomize.atomically(function () {
         if (undefined === atomize.root.queueWriter) {
             atomize.root.queueWriter = "taken";
