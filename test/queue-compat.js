@@ -1,27 +1,16 @@
 // atomize-translate queue.js queue-compat.js atomize console
 
-/*global atomize */
-/*jslint browser: true, devel: true */
-
-var registered = false,
-    created = false,
-    myPos,
-    writer,
-    next = 0,
-    value,
-    atomize;
-
-function create(e, cont) {
+var registered = false, created = false, myPos, writer, next = 0, value, atomize;
+function create (e, cont) {
     if (created) {
         cont(false);
     } else {
         atomize.atomically(function () {
-            if (undefined === atomize.root.queue) {
-                atomize.root.queue = atomize.lift({});
+            if (undefined === atomize.access(atomize.root, "queue")) {
+                atomize.assign(atomize.root, "queue", atomize.lift({}));
             }
-            if (undefined === atomize.root.queue.head) {
-                atomize.root.queue.head =
-                    atomize.lift({val: atomize.lift(e), next: atomize.lift({})});
+            if (undefined === atomize.access(atomize.access(atomize.root, "queue"), "head")) {
+                atomize.assign(atomize.access(atomize.root, "queue"), "head", atomize.lift({val: atomize.lift(e), next: atomize.lift({})}));
                 return true;
             } else {
                 return false;
@@ -34,40 +23,38 @@ function create(e, cont) {
         });
     }
 }
-
-function enqueue(e, cont) {
+function enqueue (e, cont) {
     create(e, function (c) {
         if (c) {
             cont();
         } else {
             atomize.atomically(function () {
-                var obj = atomize.root.queue.head.next;
-                obj.next = atomize.lift({});
-                obj.val = atomize.lift(e);
-                atomize.root.queue.head = atomize.root.queue.head.next;
+                var obj = atomize.access(atomize.access(atomize.access(atomize.root, "queue"), "head"), "next");
+                atomize.assign(obj, "next", atomize.lift({}));
+                atomize.assign(obj, "val", atomize.lift(e));
+                atomize.assign(atomize.access(atomize.root, "queue"), "head", atomize.access(atomize.access(atomize.access(atomize.root, "queue"), "head"), "next"));
             }, function (result) {
                 cont();
             });
         }
     });
 }
-
-function register(cont) {
+function register (cont) {
     if (registered) {
         cont();
     } else {
         atomize.atomically(function () {
-            if (undefined === atomize.root.queue) {
-                atomize.root.queue = atomize.lift({});
+            if (undefined === atomize.access(atomize.root, "queue")) {
+                atomize.assign(atomize.root, "queue", atomize.lift({}));
             }
         }, function (result) {
             registered = true;
             atomize.atomically(function () {
-                if (undefined === atomize.root.queue.head) {
+                if (undefined === atomize.access(atomize.access(atomize.root, "queue"), "head")) {
                     atomize.retry();
                 }
                 if (undefined === myPos) {
-                    myPos = atomize.root.queue.head;
+                    myPos = atomize.access(atomize.access(atomize.root, "queue"), "head");
                 }
             }, function (result) {
                 cont();
@@ -75,42 +62,39 @@ function register(cont) {
         });
     }
 }
-
-function dequeue(cont) {
+function dequeue (cont) {
     register(function () {
         atomize.atomically(function () {
             var result;
-            if (! ({}).hasOwnProperty.call(myPos, 'val')) {
+            if (!atomize.access(atomize.access({}, "hasOwnProperty"), "call")(myPos, "val")) {
                 atomize.retry();
             }
-            result = myPos.val;
-            myPos = myPos.next;
+            result = atomize.access(myPos, "val");
+            myPos = atomize.access(myPos, "next");
             return result;
         }, cont);
     });
 }
-
-
-function write() {
-    enqueue(next, function (e) { next += 1; loop(); });
+function write () {
+    enqueue(next, function (e) {
+        next += 1;
+        loop();
+    });
 }
-
-function read() {
+function read () {
     dequeue(function (result) {
         value = result;
         loop();
     });
 }
-
-function loop() {
+function loop () {
     if (writer) {
         setTimeout("write();", 1);
     } else {
         setTimeout("read();", 1);
     }
 }
-
-function log() {
+function log () {
     if (writer) {
         console.log("Writing: " + next);
     } else {
@@ -118,16 +102,14 @@ function log() {
     }
     debug();
 }
-
-function debug() {
+function debug () {
     setTimeout("log();", 1000);
 }
-
-function start() {
+function start () {
     atomize = new Atomize("http://localhost:9999/atomize");
     atomize.atomically(function () {
-        if (undefined === atomize.root.queueWriter) {
-            atomize.root.queueWriter = "taken";
+        if (undefined === atomize.access(atomize.root, "queueWriter")) {
+            atomize.assign(atomize.root, "queueWriter", "taken");
             return true;
         } else {
             return false;
