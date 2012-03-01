@@ -3,21 +3,21 @@
 function start () {
     var atomize = new Atomize("http://localhost:9999/atomize");
     atomize.atomically(function () {
-        if (undefined === atomize.access(atomize.root, "clients")) {
-            atomize.assign(atomize.root, "clients", 1);
+        if (undefined === atomize.access(atomize.root, "retryDecider")) {
+            atomize.assign(atomize.root, "retryDecider", 1);
             return true;
         } else {
-            atomize.assign(atomize.root, "clients", atomize.access(atomize.root, "clients") + 1);
+            atomize.assign(atomize.root, "retryDecider", atomize.access(atomize.root, "retryDecider") + 1);
             return false;
         }
     }, function (writer) {
         atomize.atomically(function () {
             if (writer) {
-                if (1 === atomize.access(atomize.root, "clients")) {
+                if (1 === atomize.access(atomize.root, "retryDecider")) {
                     atomize.retry();
                 } else {
                     atomize.assign(atomize.root, "notified", atomize.lift(Date()));
-                    atomize.erase(atomize.root, "clients");
+                    atomize.erase(atomize.root, "retryDecider");
                     return "notified others";
                 }
             } else {

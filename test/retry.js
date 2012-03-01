@@ -3,21 +3,21 @@
 function start() {
     var atomize = new Atomize("http://localhost:9999/atomize");
     atomize.atomically(function () {
-        if (undefined === atomize.root.clients) {
-            atomize.root.clients = 1;
+        if (undefined === atomize.root.retryDecider) {
+            atomize.root.retryDecider = 1;
             return true;
         } else {
-            atomize.root.clients += 1;
+            atomize.root.retryDecider += 1;
             return false
         }
     }, function (writer) {
         atomize.atomically(function () {
             if (writer) {
-                if (1 === atomize.root.clients) {
+                if (1 === atomize.root.retryDecider) {
                     atomize.retry();
                 } else {
                     atomize.root.notified = atomize.lift(Date());
-                    delete atomize.root.clients
+                    delete atomize.root.retryDecider
                     return "notified others";
                 }
             } else {
