@@ -639,15 +639,18 @@ function init () {
     atomize = new Atomize("http://localhost:9999/atomize");
     canvas = atomize.access(document, "getElementById")("game_canvas");
     initCanvas();
-    atomize.atomically(function () {
-        if (undefined === atomize.access(atomize.root, "bomberman")) {
-            atomize.assign(atomize.root, "bomberman", atomize.lift({}));
-        }
-        return atomize.access(atomize.root, "bomberman");
-    }, function (raw) {
-        bomberman = new Bomberman(raw);
-        atomize.access(bomberman, "maybeInit")();
-        requestAnimFrame(tick);
-        atomize.access(window, "addEventListener")("keydown", doKeyDown, true);
-    });
+    atomize.onAuthenticated = function () {
+        atomize.atomically(function () {
+            if (undefined === atomize.access(atomize.root, "bomberman")) {
+                atomize.assign(atomize.root, "bomberman", atomize.lift({}));
+            }
+            return atomize.access(atomize.root, "bomberman");
+        }, function (raw) {
+            bomberman = new Bomberman(raw);
+            atomize.access(bomberman, "maybeInit")();
+            requestAnimFrame(tick);
+            atomize.access(window, "addEventListener")("keydown", doKeyDown, true);
+        });
+    };
+    atomize.connect();
 }

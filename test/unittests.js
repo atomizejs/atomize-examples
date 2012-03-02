@@ -1,6 +1,7 @@
 // atomize-translate unittests.js unittests-compat.js atomize '$(document)' NiceException Error
 
 var atomize = new Atomize();
+atomize.connect();
 
 $(document).ready(function(){
 

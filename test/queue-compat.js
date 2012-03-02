@@ -107,16 +107,19 @@ function debug () {
 }
 function start () {
     atomize = new Atomize("http://localhost:9999/atomize");
-    atomize.atomically(function () {
-        if (undefined === atomize.access(atomize.root, "queueWriter")) {
-            atomize.assign(atomize.root, "queueWriter", "taken");
-            return true;
-        } else {
-            return false;
-        }
-    }, function (w) {
-        writer = w;
-        loop();
-        debug();
-    });
+    atomize.onAuthenticated = function () {
+        atomize.atomically(function () {
+            if (undefined === atomize.access(atomize.root, "queueWriter")) {
+                atomize.assign(atomize.root, "queueWriter", "taken");
+                return true;
+            } else {
+                return false;
+            }
+        }, function (w) {
+            writer = w;
+            loop();
+            debug();
+        });
+    };
+    atomize.connect();
 }

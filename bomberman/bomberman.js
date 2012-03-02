@@ -752,16 +752,19 @@ function init () {
     canvas = document.getElementById("game_canvas");
     initCanvas();
 
-    atomize.atomically(
-        function () {
-            if (undefined === atomize.root.bomberman) {
-                atomize.root.bomberman = atomize.lift({});
-            }
-            return atomize.root.bomberman;
-        }, function (raw) {
-            bomberman = new Bomberman(raw);
-            bomberman.maybeInit();
-            requestAnimFrame(tick);
-            window.addEventListener('keydown', doKeyDown, true);
-        });
+    atomize.onAuthenticated = function () {
+        atomize.atomically(
+            function () {
+                if (undefined === atomize.root.bomberman) {
+                    atomize.root.bomberman = atomize.lift({});
+                }
+                return atomize.root.bomberman;
+            }, function (raw) {
+                bomberman = new Bomberman(raw);
+                bomberman.maybeInit();
+                requestAnimFrame(tick);
+                window.addEventListener('keydown', doKeyDown, true);
+            });
+    };
+    atomize.connect();
 }

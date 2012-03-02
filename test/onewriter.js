@@ -62,19 +62,22 @@ cont = function (writer) {
 
 function start() {
     atomize = new Atomize("http://localhost:9999/atomize");
-    atomize.atomically(function () {
-        if (undefined === atomize.root.obj ||
-            undefined === atomize.root.obj.x) {
-            atomize.root.obj = atomize.lift({x: 1});
-            return {writer: true, obj: atomize.root.obj};
-        } else {
-            return {writer: false, obj: atomize.root.obj};
-        }
-    }, function (result) {
-        obj = result.obj;
-        if (result.writer) {
-            expectedWrite = 2;
-        }
-        cont(result.writer);
-    });
+    atomize.onAuthenticated = function () {
+        atomize.atomically(function () {
+            if (undefined === atomize.root.obj ||
+                undefined === atomize.root.obj.x) {
+                atomize.root.obj = atomize.lift({x: 1});
+                return {writer: true, obj: atomize.root.obj};
+            } else {
+                return {writer: false, obj: atomize.root.obj};
+            }
+        }, function (result) {
+            obj = result.obj;
+            if (result.writer) {
+                expectedWrite = 2;
+            }
+            cont(result.writer);
+        });
+    };
+    atomize.connect();
 }

@@ -48,18 +48,21 @@ cont = function (writer) {
 };
 function start () {
     atomize = new Atomize("http://localhost:9999/atomize");
-    atomize.atomically(function () {
-        if ((undefined === atomize.access(atomize.root, "obj")) || (undefined === atomize.access(atomize.access(atomize.root, "obj"), "x"))) {
-            atomize.assign(atomize.root, "obj", atomize.lift({x: 1}));
-            return {writer: true, obj: atomize.access(atomize.root, "obj")};
-        } else {
-            return {writer: false, obj: atomize.access(atomize.root, "obj")};
-        }
-    }, function (result) {
-        obj = result.obj;
-        if (result.writer) {
-            expectedWrite = 2;
-        }
-        cont(result.writer);
-    });
+    atomize.onAuthenticated = function () {
+        atomize.atomically(function () {
+            if ((undefined === atomize.access(atomize.root, "obj")) || (undefined === atomize.access(atomize.access(atomize.root, "obj"), "x"))) {
+                atomize.assign(atomize.root, "obj", atomize.lift({x: 1}));
+                return {writer: true, obj: atomize.access(atomize.root, "obj")};
+            } else {
+                return {writer: false, obj: atomize.access(atomize.root, "obj")};
+            }
+        }, function (result) {
+            obj = result.obj;
+            if (result.writer) {
+                expectedWrite = 2;
+            }
+            cont(result.writer);
+        });
+    };
+    atomize.connect();
 }
