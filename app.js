@@ -12,6 +12,7 @@ if (port_index > -1) {
 
 var atomizeServer = atomize.create(httpServer, '[/]atomize');
 var atomizeClient = atomizeServer.client();
+
 atomizeClient.atomically(function () {
     atomizeClient.root.clients = atomizeClient.lift({server: {}});
 }, function () {
@@ -25,8 +26,8 @@ atomizeClient.atomically(function () {
             });
         });
 
-        /* // Example of how to implement authentication
-        client.on('data', function (message, client) {
+        // Example of how to implement authentication
+        /* client.on('data', function (message, client) {
             var text = JSON.parse(message).text;
             if (text === "wibble") {
                 client.connection.write(JSON.stringify({text: "wobble"}));
@@ -40,8 +41,9 @@ atomizeClient.atomically(function () {
             } else {
                 client.connection.write(JSON.stringify({text: "denied"}));
             }
-        });
-        */
+        }); */
+
+        console.log("New connection id: " + client.connection.id);
         client.isAuthenticated = true;
     });
 });
