@@ -1,243 +1,428 @@
 // atomize-translate unittests.js unittests-compat.js atomize '$(document)' NiceException Error
 
-var atomize = new Atomize();
-atomize.connect();
+var URL = "http://localhost:9999/atomize";
+
+
+function NiceException() {};
+NiceException.prototype = Error.prototype;
+
+var niceException = new NiceException();
+
+function withAtomize (clientsAry, test) {
+    var atomize = new Atomize(URL);
+    atomize.onAuthenticated = function () {
+        atomize.atomically(function () {
+            var key = Date();
+            atomize.root[key] = atomize.lift({});
+            return key;
+        }, function (key) {
+            var i;
+            for (i = 0; i < clientsAry.length; i += 1) {
+                clientsAry[i] = new Atomize(URL);
+                if (0 === i) {
+                    clientsAry[i].onAuthenticated = function () {
+                        test(key, clientsAry, function () {
+                            for (i = 0; i < clientsAry.length; i += 1) {
+                                clientsAry[i].close();
+                                clientsAry[i] = undefined;
+                            }
+                            atomize.atomically(function () {
+                                delete atomize.root[key];
+                            }, function () {
+                                atomize.close();
+                            });
+                        });
+                    };
+                } else {
+                    (function () {
+                        var j = i - 1;
+                        clientsAry[i].onAuthenticated = function () {
+                            clientsAry[j].connect();
+                        }
+                    })();
+                }
+            }
+            clientsAry[clientsAry.length - 1].connect();
+        });
+    };
+    atomize.connect();
+}
+
+function clients (n) {
+    var ary = [];
+    ary.length = n;
+    return ary;
+}
+
+function contAndStart (cont) {
+    cont();
+    start();
+}
 
 $(document).ready(function(){
 
-    function NiceException() {};
-    NiceException.prototype = Error.prototype;
+    asyncTest("Empty transaction", 2, function () {
+        withAtomize(clients(1), function (key, clients, cont) {
+            var c1 = clients[0];
+            c1.atomically(function () {
+                ok(true, "This txn has no read or writes so should run once");
+            }, function () {
+                ok(true, "The continuation should be run");
+                contAndStart(cont);
+            });
+        });
+    });
 
-    var niceException = new NiceException();
+    asyncTest("Await private empty root", 2, function () {
+        withAtomize(clients(1), function (key, clients, cont) {
+            var c1 = clients[0];
+            c1.atomically(function () {
+                if (undefined === c1.root[key]) {
+                    ok(true, "We should retry at least once");
+                    c1.retry();
+                }
+                return Object.keys(c1.root[key]).length;
+            }, function (fieldCount) {
+                strictEqual(fieldCount, 0, "Root object should be empty");
+                contAndStart(cont);
+            });
+        });
+    });
 
-    test("Empty Txn",
-         function() {
-             atomize.atomically(function () {});
-         });
+    asyncTest("Set Primitive", 1, function () {
+        withAtomize(clients(1), function (key, clients, cont) {
+            var c1 = clients[0],
+                value = 5;
+            c1.atomically(function () {
+                if (undefined === c1.root[key]) {
+                    c1.retry();
+                } else if (undefined !== c1.root[key].field) {
+                    throw "Found existing field!";
+                }
+                c1.root[key].field = value;
+                return c1.root[key].field;
+            }, function (result) {
+                strictEqual(result, value, "Should have got back value");
+                contAndStart(cont);
+            });
+        });
+    });
 
-    test("Returns result",
-         function() {
-             var x = {};
-             atomize.atomically(function() {
-                 return x;
-             }, function (y) {
-                 strictEqual(x, y, "Object has been cloned?!");
-             });
-         });
+    asyncTest("Set Empty Object", 1, function () {
+        withAtomize(clients(1), function (key, clients, cont) {
+            var c1 = clients[0],
+                value = {};
+            c1.atomically(function () {
+                if (undefined === c1.root[key]) {
+                    c1.retry();
+                } else if (undefined !== c1.root[key].field) {
+                    throw "Found existing field!";
+                }
+                c1.root[key].field = c1.lift(value);
+                return c1.root[key].field;
+            }, function (result) {
+                deepEqual(result, value, "Should have got back value");
+                contAndStart(cont);
+            });
+        });
+    });
 
-    test("Modification of non-TVar leaks on success",
-         function() {
-             var x = {};
-             atomize.atomically(function() {
-                 x.y = "hello";
-             }, function () {
-                 strictEqual(x.y, "hello", "Expecting to find 'hello'...");
-             });
-         });
+    asyncTest("Set Complex Object", 1, function () {
+        withAtomize(clients(1), function (key, clients, cont) {
+            var c1 = clients[0],
+                value = {a: "hello", b: true, c: 5, d: {}};
+            value.e = value; // add loop
+            value.f = value.d; // add non-loop alias
+            c1.atomically(function () {
+                if (undefined === c1.root[key]) {
+                    c1.retry();
+                } else if (undefined !== c1.root[key].field) {
+                    throw "Found existing field!";
+                }
+                c1.root[key].field = c1.lift(value);
+                return c1.root[key].field;
+            }, function (result) {
+                deepEqual(result, value, "Should have got back value");
+                contAndStart(cont);
+            });
+        });
+    });
 
+    asyncTest("Trigger (add field)", 1, function () {
+        withAtomize(clients(2), function (key, clients, cont) {
+            var c1 = clients[0],
+                c2 = clients[1],
+                trigger = "pop!";
 
-    test("Modification of non-TVar leaks on failure",
-         function() {
-             var x = {};
-             try {
-                 atomize.atomically(function() {
-                     // x is not a TVar, so this write isn't protected
-                     // by the txn
-                     x.y = "hello";
-                     throw niceException;
-                     x.z = "goodbye";
-                 });
-             } catch (e) {
-                 strictEqual(e, niceException, "Should have caught niceException");
-                 strictEqual(x.y, "hello", "Expecting to find 'hello'");
-                 strictEqual(x.z, undefined, "Expecting to find undefined");
-             }
-         });
+            c1.atomically(function () {
+                if (undefined === c1.root[key] ||
+                    undefined === c1.root[key].trigger) {
+                    c1.retry();
+                }
+                return c1.root[key].trigger;
+            }, function (result) {
+                strictEqual(trigger, result, "Should have received the trigger");
+                contAndStart(cont);
+            });
 
-    test("Can create fresh TVar of empty object and return it",
-         function () {
-             atomize.atomically(function () {
-                 return atomize.lift({});
-             }, function (x) {
-                 notStrictEqual(x, undefined, "Should have got an object back");
-                 deepEqual(x, {}, "Object should be an empty object");
-                 deepEqual(x, atomize.lift({}),
-                           "Object should be an empty object (lifted)");
-             });
-         });
+            c2.atomically(function () {
+                if (undefined === c2.root[key]) {
+                    c2.retry();
+                }
+                if (undefined === c2.root[key].trigger) {
+                    c2.root[key].trigger = trigger;
+                } else {
+                    throw "Found existing trigger!";
+                }
+            }); // no need for a continuation here
+        });
+    });
 
-    test("Can create fresh TVar of non-empty object and return it",
-         function () {
-             atomize.atomically(function () {
-                 return atomize.lift({a: "hello", b: {}});
-             }, function (x) {
-                 notStrictEqual(x, undefined, "Should have got an object back");
-                 deepEqual(x, {a: "hello", b: {}}, "Object should be populated");
-                 deepEqual(x, atomize.lift({a: "hello", b: {}}),
-                           "Object should be populated (lifted)");
-             });
-         });
+    asyncTest("Trigger (add and change field)", 3, function () {
+        withAtomize(clients(2), function (key, clients, cont) {
+            var c1 = clients[0],
+                c2 = clients[1],
+                trigger1 = "pop!",
+                trigger2 = "!pop";
 
-    test("Can create TVar from existing object and modify it",
-         function () {
-             var x = {a: "hello"};
-             atomize.atomically(function () {
-                 var y = atomize.lift(x);
-                 y.a = "goodbye";
-                 y.b = atomize.lift({});
-                 deepEqual(y, atomize.lift({a: "goodbye", b: {}}),
-                           "In txn modifications should work");
-             }, function () {
-                 deepEqual(x, {a: "goodbye", b: {}}, "Object should have been modified");
-                 deepEqual(x, atomize.lift({a: "goodbye", b: {}}),
-                           "Object should have been modified (lifted)");
-                 x.b = 5; // sadly, can't be prevented
-             });
-         });
+            c1.atomically(function () {
+                if (undefined === c1.root[key] ||
+                    undefined === c1.root[key].trigger) {
+                    c1.retry();
+                }
+                if (c1.root[key].trigger == trigger1) {
+                    c1.root[key].trigger = trigger2;
+                    return true;
+                } else {
+                    return false;
+                }
+            }, function (success) {
+                ok(success, "Reached 1");
+            });
 
-    test("Can only write to TVar when in Txn",
-         function () {
-             atomize.atomically(function () {
-                 var y = atomize.lift({});
-                 y.a = "hello";
-                 return y;
-             }, function (x) {
-                 deepEqual(x, {a: "hello"}, "Got the wrong object back");
-                 deepEqual(x, atomize.lift({a: "hello"}), "Got the wrong object back (lifted)");
-                 try {
-                     x.a = "goodbye";
-                 } catch (e) {
-                     strictEqual(e.constructor, WriteOutsideTransactionException,
-                                 "Should have caught a write-violation exception");
-                 }
-                 try {
-                     delete x.a;
-                 } catch (e) {
-                     strictEqual(e.constructor, DeleteOutsideTransactionException,
-                                 "Should have caught a delete-violation exception");
-                 }
-             });
-         });
+            c2.atomically(function () {
+                if (undefined === c2.root[key]) {
+                    c2.retry();
+                }
+                if (undefined === c2.root[key].trigger) {
+                    c2.root[key].trigger = trigger1;
+                } else {
+                    throw "Found existing trigger!";
+                }
+            }, function () {
+                ok(true, "Reached 2");
+                c2.atomically(function () {
+                    if (trigger2 != c2.root[key].trigger) {
+                        c2.retry();
+                    }
+                }, function () {
+                    ok(true, "Reached 3");
+                    contAndStart(cont);
+                });
+            });
+        });
+    });
 
-    test("Can only only assign TVars and primitives to TVars",
-         function () {
-             atomize.atomically(function () {
-                 var x = atomize.lift({});
-                 x.a = "hello";
-                 x.b = 5;
-                 x.c = true;
-                 x.d = atomize.lift({});
-                 deepEqual(x, atomize.lift({a: "hello", b: 5, c: true, d: {}}),
-                           "Object creation and population failed");
-                 try {
-                     x.e = {}
-                 } catch (e) {
-                     strictEqual(e.constructor, NotATVarException,
-                                 "Should have caught a not-a-tvar exception")
-                 }
-             });
-         });
+    asyncTest("Trigger (add and remove field)", 3, function () {
+        withAtomize(clients(2), function (key, clients, cont) {
+            var c1 = clients[0],
+                c2 = clients[1],
+                trigger = "pop!";
 
-    test("Can modify existing TVars",
-         function () {
-             atomize.atomically(function () {
-                 var y = atomize.lift({});
-                 y.a = "hello";
-                 y.b = atomize.lift({x: 5, y: true, z: {}});
-                 deepEqual(y, atomize.lift({a: "hello", b: {x: 5, y: true, z: {}}}),
-                           "Object creation and population failed");
-                 return y;
-             }, function (x) {
-                 deepEqual(x, {a: "hello", b: {x: 5, y: true, z: {}}},
-                           "Got the wrong object back");
-                 deepEqual(x, atomize.lift({a: "hello", b: {x: 5, y: true, z: {}}}),
-                           "Got the wrong object back (lifted)");
-                 atomize.atomically(function () {
-                     x.a = "goodbye";
-                     x.b.y = false;
-                     delete x.b.z;
-                     deepEqual(x, atomize.lift({a: "goodbye", b: {x: 5, y: false}}),
-                               "Modifications not visible within txn");
-                 }, function () {
-                     deepEqual(x, {a: "goodbye", b: {x: 5, y: false}},
-                               "Got the wrong object back post modifications");
-                     deepEqual(x, atomize.lift({a: "goodbye", b: {x: 5, y: false}}),
-                               "Got the wrong object back post modifications (lifted)");
-                 });
-             });
-         });
+            c1.atomically(function () {
+                if (undefined === c1.root[key] ||
+                    undefined === c1.root[key].trigger) {
+                    c1.retry();
+                }
+                delete c1.root[key].trigger;
+            }, function () {
+                ok(true, "Reached 1");
+            });
 
-    test("Writes to TVars within Txn are undone on abort",
-         function () {
-             atomize.atomically(function () {
-                 var y = atomize.lift({});
-                 y.a = "hello";
-                 y.b = atomize.lift({x: 5, y: true, z: {}});
-                 return y;
-             }, function (x) {
-                 deepEqual(x, {a: "hello", b: {x: 5, y: true, z: {}}},
-                           "Got the wrong object back");
-                 deepEqual(x, atomize.lift({a: "hello", b: {x: 5, y: true, z: {}}}),
-                           "Got the wrong object back (lifted)");
+            c2.atomically(function () {
+                if (undefined === c2.root[key]) {
+                    c2.retry();
+                }
+                if (undefined === c2.root[key].trigger) {
+                    c2.root[key].trigger = trigger;
+                } else {
+                    throw "Found existing trigger!";
+                }
+            }, function () {
+                ok(true, "Reached 2");
+                c2.atomically(function () {
+                    if (undefined !== c2.root[key].trigger) {
+                        c2.retry();
+                    }
+                }, function () {
+                    ok(true, "Reached 3");
+                    contAndStart(cont);
+                });
+            });
+        });
+    });
 
-                 try {
-                     atomize.atomically(function () {
-                         x.a = "goodbye";
-                         x.b.y = false;
-                         delete x.b.z;
-                         x.b.w = atomize.lift({});
-                         deepEqual(x, atomize.lift({a: "goodbye", b: {x: 5, y: false, w: {}}}),
-                                   "Modifications not visible within txn");
-                         throw niceException;
-                     });
-                 } catch (e) {
-                     strictEqual(e, niceException, "Should have caught niceException");
-                 }
-                 deepEqual(x, {a: "hello", b: {x: 5, y: true, z: {}}},
-                           "Modifications not undone on Txn abort");
-                 deepEqual(x, atomize.lift({a: "hello", b: {x: 5, y: true, z: {}}}),
-                           "Modifications not undone on Txn abort (lifted)");
-                 atomize.atomically(function () {
-                     deepEqual(x, atomize.lift({a: "hello", b: {x: 5, y: true, z: {}}}),
-                               "Undone modifications may have leaked");
-                 });
-             });
-         });
+    asyncTest("Send Primitive", 1, function () {
+        withAtomize(clients(2), function (key, clients, cont) {
+            var c1 = clients[0],
+                c2 = clients[1],
+                value = 5;
+            c1.atomically(function () {
+                if (undefined === c1.root[key]) {
+                    c1.retry();
+                } else if (undefined !== c1.root[key].field) {
+                    throw "Found existing field!";
+                }
+                c1.root[key].field = value;
+            });
+            c2.atomically(function () {
+                if (undefined === c2.root[key] ||
+                    undefined === c2.root[key].field) {
+                    c2.retry();
+                }
+                return c2.root[key].field;
+            }, function (result) {
+                strictEqual(result, value, "Should have got back value");
+                contAndStart(cont);
+            });
+        });
+    });
 
-    test("Writes to TVars within Txn are undone on abort for existing var",
-         function () {
-             var x = {a: "hello", b: {x: 5, y: true, z: {}}};
-             atomize.atomically(function () {
-                 var y = atomize.lift(x);
-                 y.b.x = 6;
-             }, function () {
-                 deepEqual(x, {a: "hello", b: {x: 6, y: true, z: {}}},
-                           "Object modifications lost");
-                 deepEqual(x, atomize.lift({a: "hello", b: {x: 6, y: true, z: {}}}),
-                           "Object modifications lost (lifted)");
-                 try {
-                     atomize.atomically(function () {
-                         var y = atomize.lift(x);
-                         y.a = "goodbye";
-                         y.b.y = false;
-                         delete y.b.z;
-                         y.b.w = atomize.lift({});
-                         deepEqual(y, atomize.lift({a: "goodbye", b: {x: 6, y: false, w: {}}}),
-                                   "Modifications not visible within txn");
-                         throw niceException;
-                     });
-                 } catch (e) {
-                     strictEqual(e, niceException, "Should have caught niceException");
-                 }
-                 deepEqual(x, {a: "hello", b: {x: 6, y: true, z: {}}},
-                           "Modifications not undone on Txn abort");
-                 deepEqual(x, atomize.lift({a: "hello", b: {x: 6, y: true, z: {}}}),
-                           "Modifications not undone on Txn abort (lifted)");
-                 atomize.atomically(function () {
-                     deepEqual(x, atomize.lift({a: "hello", b: {x: 6, y: true, z: {}}}),
-                               "Undone modifications may have leaked");
-                 });
-             });
-         });
+    asyncTest("Send Empty Object", 1, function () {
+        withAtomize(clients(2), function (key, clients, cont) {
+            var c1 = clients[0],
+                c2 = clients[1],
+                value = {};
+            c1.atomically(function () {
+                if (undefined === c1.root[key]) {
+                    c1.retry();
+                } else if (undefined !== c1.root[key].field) {
+                    throw "Found existing field!";
+                }
+                c1.root[key].field = c1.lift(value);
+            });
+            c2.atomically(function () {
+                if (undefined === c2.root[key] ||
+                    undefined === c2.root[key].field) {
+                    c2.retry();
+                }
+                return c2.root[key].field;
+            }, function (result) {
+                deepEqual(result, value, "Should have got back value");
+                contAndStart(cont);
+            });
+        });
+    });
+
+    asyncTest("Send Complex Object", 1, function () {
+        withAtomize(clients(2), function (key, clients, cont) {
+            var c1 = clients[0],
+                c2 = clients[1],
+                value = {a: "hello", b: true, c: 5, d: {}};
+            value.e = value; // add loop
+            value.f = value.d; // add non-loop alias
+            c1.atomically(function () {
+                if (undefined === c1.root[key]) {
+                    c1.retry();
+                } else if (undefined !== c1.root[key].field) {
+                    throw "Found existing field!";
+                }
+                c1.root[key].field = c1.lift(value);
+            });
+            c2.atomically(function () {
+                if (undefined === c2.root[key] ||
+                    undefined === c2.root[key].field) {
+                    c2.retry();
+                }
+                return c2.root[key].field;
+            }, function (result) {
+                deepEqual(result, value, "Should have got back value");
+                contAndStart(cont);
+            });
+        });
+    });
+
+    // For some reason, the current Proxy thing suggests all
+    // descriptors should be configurable. Thus we don't test for the
+    // 'configurable' meta-property here. This issue should go away
+    // once "direct proxies" arrive.
+    asyncTest("Keys, Enumerate, etc", 10, function () {
+        withAtomize(clients(2), function (key, clients, cont) {
+            var c1 = clients[0],
+                c2 = clients[1],
+                descriptors = {a: {value: 1,
+                                   writable: true,
+                                   enumerable: true},
+                               b: {value: 2,
+                                   writable: false,
+                                   enumerable: true},
+                               c: {value: 3,
+                                   writable: true,
+                                   enumerable: false},
+                               d: {value: 4,
+                                   writable: false,
+                                   enumerable: false}};
+
+            c1.atomically(function () {
+                if (undefined === c1.root[key]) {
+                    c1.retry();
+                }
+                var keys = Object.keys(descriptors),
+                    x, field, descriptor;
+                for (x = 0; x < keys.length; x += 1) {
+                    field = keys[x];
+                    descriptor = descriptors[field];
+                    Object.defineProperty(c1.root[key], field, descriptor);
+                }
+                c1.root[key].done = true;
+            });
+            c2.atomically(function () {
+                if (undefined === c2.root[key] ||
+                    undefined === c2.root[key].done) {
+                    c2.retry();
+                }
+                delete c2.root[key].done;
+                var keys = Object.keys(c2.root[key]),
+                    names = Object.getOwnPropertyNames(c2.root[key]),
+                    enumerable = [],
+                    descriptors = {},
+                    field, x;
+                for (field in c2.root[key]) {
+                    enumerable.push(field);
+                }
+                for (x = 0; x < names.length; x += 1) {
+                    field = names[x];
+                    descriptors[field] = Object.getOwnPropertyDescriptor(c2.root[key], field);
+                    delete descriptors[field].configurable; // see comment above
+                }
+                return {keys: keys.sort(),
+                        names: names.sort(),
+                        enumerable: enumerable.sort(),
+                        descriptors: descriptors,
+                        hasA: 'a' in c2.root[key],
+                        hasC: 'c' in c2.root[key],
+                        hasZ: 'z' in c2.root[key],
+                        hasOwnA: ({}).hasOwnProperty.call(c2.root[key], 'a'),
+                        hasOwnC: ({}).hasOwnProperty.call(c2.root[key], 'c'),
+                        hasOwnZ: ({}).hasOwnProperty.call(c2.root[key], 'z')};
+            }, function (result) {
+                deepEqual(result.keys, ['a', 'b'],
+                          "Keys should have found enumerable fields");
+                deepEqual(result.enumerable, ['a', 'b'],
+                          "Enumeration should have found enumerable fields");
+                deepEqual(result.names, ['a', 'b', 'c', 'd'],
+                          "Should have found field names 'a' to 'd'");
+                deepEqual(result.descriptors, descriptors,
+                          "Should have got same descriptors back");
+                ok(result.hasA, "Should have found field 'a'");
+                ok(result.hasC, "Should have found field 'c'");
+                ok(! result.hasZ, "Should not have found field 'z'");
+                ok(result.hasOwnA, "Should have found own field 'a'");
+                ok(result.hasOwnC, "Should have found own field 'c'");
+                ok(! result.hasOwnZ, "Should not have found own field 'z'");
+                contAndStart(cont);
+            });
+        });
+    });
 
 });
