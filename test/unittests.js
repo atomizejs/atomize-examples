@@ -489,7 +489,7 @@ $(document).ready(function(){
                 fun;
             fun = function (sum) {
                 ok(true, "Reached 1"); // should reach this 4 times
-                if (10 === sum) {
+                if (10 === sum) { // 10 === 1+2+3+4
                     contAndStart(cont);
                     return;
                 }
@@ -532,7 +532,7 @@ $(document).ready(function(){
 
     asyncTest("OrElse - observing order", 4, function () {
         // Same as before, but drop the deletes, and invert the order
-        // of the orElse statements. As its deterministict choice,
+        // of the orElse statements. As its deterministic choice,
         // should do the same as before.
         withAtomize(clients(2), function (key, clients, cont) {
             var c1 = clients[0],
