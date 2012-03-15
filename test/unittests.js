@@ -425,4 +425,54 @@ $(document).ready(function(){
         });
     });
 
+    asyncTest("Triggers: Multiple concurrent retries, multiple clients", 5, function () {
+        withAtomize(clients(2), function (key, clients, cont) {
+            var c1 = clients[0],
+                c2 = clients[1];
+            c1.atomically(function () {
+                if (undefined === c1.root[key] ||
+                    undefined === c1.root[key].ready) {
+                    c1.retry();
+                }
+                c1.root[key].ready = ! c1.root[key].ready; // 2. Flip it false to true
+            }, function () {
+                ok(true, "Reached 1");
+            });
+            c1.atomically(function () {
+                if (undefined === c1.root[key] ||
+                    undefined === c1.root[key].ready ||
+                    ! c1.root[key].ready) {
+                    c1.retry();
+                }
+                delete c1.root[key].ready; // 3. Delete it
+            }, function () {
+                ok(true, "Reached 2");
+            });
+            c2.atomically(function () {
+                if (undefined === c2.root[key] ||
+                    undefined === c2.root[key].ready) {
+                    c2.retry(); // A. Await its existence
+                }
+            }, function () {
+                ok(true, "Reached 3");
+                c2.atomically(function () {
+                    if (Object.hasOwnProperty.call(c2.root[key], 'ready')) {
+                        c2.retry(); // B. Await its disappearance
+                    }
+                }, function () {
+                    ok(true, "Reached 4");
+                    contAndStart(cont); // C. All done
+                });
+            });
+            c2.atomically(function () {
+                if (undefined === c2.root[key]) {
+                    c2.retry();
+                }
+                c2.root[key].ready = false; // 1. Create it as false
+            }, function () {
+                ok(true, "Reached 5");
+            });
+        });
+    });
+
 });
