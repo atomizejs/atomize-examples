@@ -425,7 +425,7 @@ $(document).ready(function(){
         });
     });
 
-    asyncTest("Triggers: Multiple concurrent retries, multiple clients", 5, function () {
+    asyncTest("Triggers: Multiple concurrent retries, multiple clients", 6, function () {
         withAtomize(clients(2), function (key, clients, cont) {
             var c1 = clients[0],
                 c2 = clients[1];
@@ -464,6 +464,8 @@ $(document).ready(function(){
                     if (Object.hasOwnProperty.call(c2.root[key], 'ready')) {
                         c2.retry(); // B. Await its disappearance
                     }
+                    ok(c2.root[key].gone, "If 'ready' has gone, 'gone' must be truth");
+                    delete c2.root[key].gone;
                 }, function () {
                     ok(true, "Reached 4");
                     contAndStart(cont); // C. All done
