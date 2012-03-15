@@ -438,6 +438,9 @@ $(document).ready(function(){
             }, function () {
                 ok(true, "Reached 1");
             });
+            // We do the 'gone' thing because otherwise c1's txns can
+            // create and remove it, before c2 spots its
+            // existence. I.e. classic race condition.
             c1.atomically(function () {
                 if (undefined === c1.root[key] ||
                     undefined === c1.root[key].ready ||
@@ -445,12 +448,14 @@ $(document).ready(function(){
                     c1.retry();
                 }
                 delete c1.root[key].ready; // 3. Delete it
+                c1.root[key].gone = true;
             }, function () {
                 ok(true, "Reached 2");
             });
             c2.atomically(function () {
                 if (undefined === c2.root[key] ||
-                    undefined === c2.root[key].ready) {
+                    (undefined === c2.root[key].ready &&
+                     undefined === c2.root[key].gone)) {
                     c2.retry(); // A. Await its existence
                 }
             }, function () {
