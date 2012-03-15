@@ -482,4 +482,100 @@ $(document).ready(function(){
         });
     });
 
+    asyncTest("OrElse", 4, function () {
+        withAtomize(clients(2), function (key, clients, cont) {
+            var c1 = clients[0],
+                c2 = clients[1],
+                fun;
+            fun = function (sum) {
+                ok(true, "Reached 1"); // should reach this 4 times
+                if (10 === sum) {
+                    contAndStart(cont);
+                    return;
+                }
+                c1.orElse(
+                    [function () {
+                        if (undefined === c1.root[key] ||
+                            undefined === c1.root[key].a) {
+                            c1.retry();
+                        }
+                        c1.root[key].b = c1.root[key].a + 2;
+                        delete c1.root[key].a;
+                        return c1.root[key].b;
+                    }, function () {
+                        if (undefined === c1.root[key] ||
+                            undefined === c1.root[key].b) {
+                            c1.retry();
+                        }
+                        c1.root[key].c = c1.root[key].b + 3;
+                        delete c1.root[key].b;
+                        return c1.root[key].c;
+                    }, function () {
+                        if (undefined === c1.root[key] ||
+                            undefined === c1.root[key].c) {
+                            c1.retry();
+                        }
+                        c1.root[key].d = c1.root[key].c + 4;
+                        delete c1.root[key].c;
+                        return c1.root[key].d;
+                    }], fun);
+            };
+            fun(0);
+            c2.atomically(function () {
+                if (undefined === c2.root[key]) {
+                    c2.retry();
+                }
+                c2.root[key].a = 1;
+            });
+        });
+    });
+
+    asyncTest("OrElse - observing order", 4, function () {
+        // Same as before, but drop the deletes, and invert the order
+        // of the orElse statements. As its deterministict choice,
+        // should do the same as before.
+        withAtomize(clients(2), function (key, clients, cont) {
+            var c1 = clients[0],
+                c2 = clients[1],
+                fun;
+            fun = function (sum) {
+                ok(true, "Reached 1"); // should reach this 4 times
+                if (10 === sum) { // 10 === 1+2+3+4
+                    contAndStart(cont);
+                    return;
+                }
+                c1.orElse(
+                    [function () {
+                        if (undefined === c1.root[key] ||
+                            undefined === c1.root[key].c) {
+                            c1.retry();
+                        }
+                        c1.root[key].d = c1.root[key].c + 4;
+                        return c1.root[key].d;
+                    }, function () {
+                        if (undefined === c1.root[key] ||
+                            undefined === c1.root[key].b) {
+                            c1.retry();
+                        }
+                        c1.root[key].c = c1.root[key].b + 3;
+                        return c1.root[key].c;
+                    }, function () {
+                        if (undefined === c1.root[key] ||
+                            undefined === c1.root[key].a) {
+                            c1.retry();
+                        }
+                        c1.root[key].b = c1.root[key].a + 2;
+                        return c1.root[key].b;
+                    }], fun);
+            };
+            fun(0);
+            c2.atomically(function () {
+                if (undefined === c2.root[key]) {
+                    c2.retry();
+                }
+                c2.root[key].a = 1;
+            });
+        });
+    });
+
 });
