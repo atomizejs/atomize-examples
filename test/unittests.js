@@ -578,4 +578,100 @@ $(document).ready(function(){
         });
     });
 
+    asyncTest("Rampaging Transactions", 999, function () {
+        withAtomize(clients(3), function (key, clients, cont) {
+            var fun, semaphore, x, y;
+            semaphore = (function () {
+                var count = 0;
+                return {
+                    up: function () {
+                        count += 1;
+                    },
+                    down: function () {
+                        count -= 1;
+                        if (0 === count) {
+                            contAndStart(cont);
+                        }
+                    }
+                }
+            })();
+            var stop = false;
+            fun = function (c) {
+                c.atomically(function () {
+                    if (stop) {
+                        c.logging(false);
+                        semaphore.down();
+                        throw "stop";
+                    }
+                    if (undefined === c.root[key] ||
+                        undefined === c.root[key].obj) {
+                        c.retry();
+                    }
+                    c.logging(true);
+                    var keys = Object.keys(c.root[key].obj),
+                        max = 0,
+                        x, field, n, obj;
+                    for (x = 0; x < keys.length; x += 1) {
+                        field = parseInt(keys[x]);
+                        max = field > max ? field : max;
+                        if (undefined === n) {
+                            n = c.root[key].obj[field].num;
+                            if (0 === n) {
+                                return n;
+                            }
+                        } else if (n !== c.root[key].obj[field].num) {
+                            stop = true;
+                            c.logging(false);
+                            console.log(keys);
+                            console.log(field);
+                            semaphore.down();
+                            throw ("All fields should have the same number: " +
+                                   n + " vs " + c.root[key].obj[field].num);
+                        }
+                        if (0.5 < Math.random()) {
+                            obj = c.lift({});
+                            obj.num = n;
+                            c.root[key].obj[field] = obj;
+                        }
+                        c.root[key].obj[field].num -= 1;
+                    }
+                    n -= 1;
+                    max += 1;
+                    if (10.5 < Math.random()) {
+                        c.root[key].obj[max] = c.lift({num: n});
+                        delete c.root[key].obj[keys[0]];
+                    }
+                    return n;
+                }, function (n) {
+                    if (n > 0) {
+                        ok(true, "Reached"); // Should have exactly 999 txns reach here
+                        fun(c);
+                    } else {
+                        semaphore.down();
+                    }
+                });
+            };
+            // We use all but one client, and each of those gets 5
+            // txns concurrently
+            for (x = 1; x < clients.length; x += 1) {
+                clients[x].stm.prefix = "(" + x + "): ";
+                for (y = 0; y < 10; y += 1) {
+                    semaphore.up();
+                    fun(clients[x]);
+                }
+            }
+            x = clients[0];
+            x.atomically(function () {
+                if (undefined === x.root[key]) {
+                    x.retry();
+                }
+                var obj = x.lift({});
+                for (y = 0; y < 10; y += 1) {
+                    obj[y] = x.lift({num: 1000});
+                }
+                x.root[key].obj = obj;
+            });
+        });
+    });
+
 });
