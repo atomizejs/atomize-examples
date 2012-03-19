@@ -578,8 +578,8 @@ $(document).ready(function(){
         });
     });
 
-    asyncTest("Rampaging Transactions", 999, function () {
-        withAtomize(clients(3), function (key, clients, cont) {
+    asyncTest("Rampaging Transactions (this takes a while)", 499, function () {
+        withAtomize(clients(6), function (key, clients, cont) {
             var fun, semaphore, x, y;
             semaphore = (function () {
                 var count = 0;
@@ -595,19 +595,12 @@ $(document).ready(function(){
                     }
                 }
             })();
-            var stop = false;
             fun = function (c) {
                 c.atomically(function () {
-                    if (stop) {
-                        c.logging(false);
-                        semaphore.down();
-                        throw "stop";
-                    }
                     if (undefined === c.root[key] ||
                         undefined === c.root[key].obj) {
                         c.retry();
                     }
-                    c.logging(true);
                     var keys = Object.keys(c.root[key].obj),
                         max = 0,
                         x, field, n, obj;
@@ -620,15 +613,10 @@ $(document).ready(function(){
                                 return n;
                             }
                         } else if (n !== c.root[key].obj[field].num) {
-                            stop = true;
-                            c.logging(false);
-                            console.log(keys);
-                            console.log(field);
-                            semaphore.down();
                             throw ("All fields should have the same number: " +
                                    n + " vs " + c.root[key].obj[field].num);
                         }
-                        if (0.5 < Math.random()) {
+                        if (0.75 < Math.random()) {
                             obj = c.lift({});
                             obj.num = n;
                             c.root[key].obj[field] = obj;
@@ -637,7 +625,7 @@ $(document).ready(function(){
                     }
                     n -= 1;
                     max += 1;
-                    if (10.5 < Math.random()) {
+                    if (0.75 < Math.random()) {
                         c.root[key].obj[max] = c.lift({num: n});
                         delete c.root[key].obj[keys[0]];
                     }
@@ -666,8 +654,8 @@ $(document).ready(function(){
                     x.retry();
                 }
                 var obj = x.lift({});
-                for (y = 0; y < 10; y += 1) {
-                    obj[y] = x.lift({num: 1000});
+                for (y = 0; y < 5; y += 1) {
+                    obj[y] = x.lift({num: 500});
                 }
                 x.root[key].obj = obj;
             });
