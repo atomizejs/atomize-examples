@@ -59,6 +59,30 @@ function contAndStart (cont) {
     start();
 }
 
+function Semaphore (cont) {
+    this.count = 0;
+    this.cont = cont;
+}
+Semaphore.prototype = {
+    fired: false,
+    up: function () {
+        if (this.fired) {
+            throw "Semaphore Already Fired";
+        }
+        this.count += 1;
+    },
+    down: function () {
+        if (this.fired) {
+            throw "Semaphore Already Fired";
+        }
+        this.count -= 1;
+        if (0 === this.count) {
+            this.fired = true;
+            this.cont()
+        }
+    }
+};
+
 $(document).ready(function(){
 
     asyncTest("Empty transaction", 2, function () {
@@ -578,88 +602,181 @@ $(document).ready(function(){
         });
     });
 
-    asyncTest("Rampaging Transactions (this takes a while)", 499, function () {
-        withAtomize(clients(6), function (key, clients, cont) {
-            var fun, semaphore, x, y;
-            semaphore = (function () {
-                var count = 0;
-                return {
-                    up: function () {
-                        count += 1;
-                    },
-                    down: function () {
-                        count -= 1;
-                        if (0 === count) {
-                            contAndStart(cont);
-                        }
-                    }
-                }
-            })();
-            fun = function (c) {
-                c.atomically(function () {
-                    if (undefined === c.root[key] ||
-                        undefined === c.root[key].obj) {
-                        c.retry();
-                    }
-                    var keys = Object.keys(c.root[key].obj),
-                        max = 0,
-                        x, field, n, obj;
-                    for (x = 0; x < keys.length; x += 1) {
-                        field = parseInt(keys[x]);
-                        max = field > max ? field : max;
-                        if (undefined === n) {
-                            n = c.root[key].obj[field].num;
-                            if (0 === n) {
-                                return n;
-                            }
-                        } else if (n !== c.root[key].obj[field].num) {
-                            throw ("All fields should have the same number: " +
-                                   n + " vs " + c.root[key].obj[field].num);
-                        }
-                        if (0.75 < Math.random()) {
-                            obj = c.lift({});
-                            obj.num = n;
-                            c.root[key].obj[field] = obj;
-                        }
-                        c.root[key].obj[field].num -= 1;
-                    }
-                    n -= 1;
-                    max += 1;
-                    if (0.75 < Math.random()) {
-                        c.root[key].obj[max] = c.lift({num: n});
-                        delete c.root[key].obj[keys[0]];
-                    }
-                    return n;
-                }, function (n) {
-                    if (n > 0) {
-                        ok(true, "Reached"); // Should have exactly 999 txns reach here
-                        fun(c);
-                    } else {
-                        semaphore.down();
-                    }
-                });
-            };
-            // We use all but one client, and each of those gets 5
-            // txns concurrently
-            for (x = 1; x < clients.length; x += 1) {
-                clients[x].stm.prefix = "(" + x + "): ";
-                for (y = 0; y < 10; y += 1) {
-                    semaphore.up();
-                    fun(clients[x]);
-                }
-            }
-            x = clients[0];
-            x.atomically(function () {
-                if (undefined === x.root[key]) {
-                    x.retry();
-                }
-                var obj = x.lift({});
-                for (y = 0; y < 5; y += 1) {
-                    obj[y] = x.lift({num: 500});
-                }
-                x.root[key].obj = obj;
-            });
-        });
-    });
+    (function () {
+        var clientCount = 6,
+            clientConcurrency = 10,
+            txnCount = 10;
+
+        asyncTest("Rampaging Transactions 1 (this takes a while)",
+                  ((clientCount - 1) * clientConcurrency * txnCount) -1, function () {
+                      withAtomize(clients(clientCount), function (key, clients, cont) {
+                          var semaphore = new Semaphore(function () { contAndStart(cont); }),
+                              fun, x, y;
+                          fun = function (c) {
+                              c.atomically(function () {
+                                  if (undefined === c.root[key] ||
+                                      undefined === c.root[key].obj) {
+                                      c.retry();
+                                  }
+                                  var keys = Object.keys(c.root[key].obj),
+                                  max = 0,
+                                  x, field, n, obj;
+                                  for (x = 0; x < keys.length; x += 1) {
+                                      field = parseInt(keys[x]);
+                                      max = field > max ? field : max;
+                                      if (undefined === n) {
+                                          n = c.root[key].obj[field].num;
+                                          if (0 === n) {
+                                              return n;
+                                          }
+                                      } else if (n !== c.root[key].obj[field].num) {
+                                          throw ("All fields should have the same number: " +
+                                                 n + " vs " + c.root[key].obj[field].num);
+                                      }
+                                      if (0.75 < Math.random()) {
+                                          obj = c.lift({});
+                                          obj.num = n;
+                                          c.root[key].obj[field] = obj;
+                                      }
+                                      c.root[key].obj[field].num -= 1;
+                                  }
+                                  n -= 1;
+                                  max += 1;
+                                  if (0.75 < Math.random()) {
+                                      c.root[key].obj[max] = c.lift({num: n});
+                                      delete c.root[key].obj[keys[0]];
+                                  }
+                                  return n;
+                              }, function (n) {
+                                  if (n > 0) {
+                                      ok(true, "Reached");
+                                      fun(c);
+                                  } else {
+                                      semaphore.down();
+                                  }
+                              });
+                          };
+                          // We use all but one client, and each of those gets 10
+                          // txns concurrently
+                          for (x = 1; x < clients.length; x += 1) {
+                              clients[x].stm.prefix = "(" + x + "): ";
+                              for (y = 0; y < clientConcurrency; y += 1) {
+                                  semaphore.up();
+                                  fun(clients[x]);
+                              }
+                          }
+                          x = clients[0];
+                          x.atomically(function () {
+                              if (undefined === x.root[key]) {
+                                  x.retry();
+                              }
+                              var obj = x.lift({});
+                              for (y = 0; y < 5; y += 1) {
+                                  obj[y] = x.lift({num: (clientCount - 1) * clientConcurrency * txnCount});
+                              }
+                              x.root[key].obj = obj;
+                          });
+                      });
+                  });
+    }());
+
+    (function () {
+        var clientCount = 6,
+            clientConcurrency = 5,
+            txnCount = 10;
+
+        asyncTest("Rampaging Transactions 2 (this takes a while)",
+                  (clientCount - 1) * clientConcurrency * txnCount, function () {
+                      withAtomize(clients(clientCount), function (key, clients, cont) {
+                          var semaphore = new Semaphore(function () { contAndStart(cont); }),
+                              fun;
+                          fun = function (c, n) {
+                              c.atomically(function () {
+                                  if (undefined === c.root[key] ||
+                                      undefined === c.root[key].obj) {
+                                      c.retry();
+                                  }
+                                  var ops, names, secret, x, name, op;
+
+                                  // First verify the old thing
+                                  ops = c.root[key].obj.log;
+                                  if (undefined !== ops) {
+                                      secret = ops.secret;
+                                      names = Object.keys(ops);
+                                      for (x = 0; x < names.length; x += 1) {
+                                          name = names[x];
+                                          if ('secret' === name) {
+                                              continue;
+                                          } else if ('delete' === ops[name]) {
+                                              if (({}).hasOwnProperty.call(c.root[key].obj, name)) {
+                                                  throw ("Found field which should be deleted: " + name)
+                                              }
+                                          } else if ('modify' === ops[name]) {
+                                              if (! ({}).hasOwnProperty.call(c.root[key].obj, name)) {
+                                                  throw ("Failed to find field: " + name);
+                                              }
+                                              if (secret !== c.root[key].obj[name].modified) {
+                                                  throw ("Found the wrong modified value in field: " + name);
+                                              }
+                                          } else if ('create' === ops[name]) {
+                                              if (! ({}).hasOwnProperty.call(c.root[key].obj, name)) {
+                                                  throw ("Failed to find field: " + name);
+                                              }
+                                              if (secret !== c.root[key].obj[name].created) {
+                                                  throw ("Found the wrong created value in field: " + name);
+                                              }
+                                          } else {
+                                              throw ("Found unknown op: " + ops[name]);
+                                          }
+                                      }
+                                  }
+
+                                  secret = Math.random();
+                                  ops = {secret: secret};
+                                  for (x = 0; x < 10; x += 1) {
+                                      name = Math.round(Math.random() * 100);
+                                      op = Math.random();
+                                      if (op > 0.9) {
+                                          delete c.root[key].obj[name];
+                                          ops[name] = 'delete';
+                                      } else if (op > 0.4 && undefined !== c.root[key].obj[name]) {
+                                          c.root[key].obj[name].modified = secret;
+                                          ops[name] = 'modify';
+                                      } else {
+                                          c.root[key].obj[name] = c.lift({created: secret,
+                                                                          modified: secret});
+                                          ops[name] = 'create';
+                                      }
+                                  }
+                                  c.root[key].obj.log = c.lift(ops);
+                              }, function () {
+                                  ok(true, "Reached");
+                                  n += 1;
+                                  if (10 === n) {
+                                      semaphore.down();
+                                  } else {
+                                      fun(c, n);
+                                  }
+                              });
+                          };
+                          // We use all but one client, and each of those gets 10
+                          // txns concurrently
+                          for (x = 1; x < clients.length; x += 1) {
+                              clients[x].stm.prefix = "(" + x + "): ";
+                              for (y = 0; y < clientConcurrency; y += 1) {
+                                  semaphore.up();
+                                  fun(clients[x], 0);
+                              }
+                          }
+                          x = clients[0];
+                          x.atomically(function () {
+                              if (undefined === x.root[key]) {
+                                  x.retry();
+                              }
+                              x.root[key].obj = x.lift({});
+                          });
+                      });
+                  });
+    }());
 
 });
