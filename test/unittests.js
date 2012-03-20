@@ -619,8 +619,8 @@ $(document).ready(function(){
                                       c.retry();
                                   }
                                   var keys = Object.keys(c.root[key].obj),
-                                  max = 0,
-                                  x, field, n, obj;
+                                      max = 0,
+                                      x, field, n, obj;
                                   for (x = 0; x < keys.length; x += 1) {
                                       field = parseInt(keys[x]);
                                       max = field > max ? field : max;
@@ -682,7 +682,7 @@ $(document).ready(function(){
 
     (function () {
         var clientCount = 6,
-            clientConcurrency = 5,
+            clientConcurrency = 6,
             txnCount = 10;
 
         asyncTest("Rampaging Transactions 2 (this takes a while)",
@@ -715,14 +715,14 @@ $(document).ready(function(){
                                               if (! ({}).hasOwnProperty.call(c.root[key].obj, name)) {
                                                   throw ("Failed to find field: " + name);
                                               }
-                                              if (secret !== c.root[key].obj[name].modified) {
+                                              if (secret !== c.root[key].obj[name].modified.value) {
                                                   throw ("Found the wrong modified value in field: " + name);
                                               }
                                           } else if ('create' === ops[name]) {
                                               if (! ({}).hasOwnProperty.call(c.root[key].obj, name)) {
                                                   throw ("Failed to find field: " + name);
                                               }
-                                              if (secret !== c.root[key].obj[name].created) {
+                                              if (secret !== c.root[key].obj[name].created.value) {
                                                   throw ("Found the wrong created value in field: " + name);
                                               }
                                           } else {
@@ -733,18 +733,19 @@ $(document).ready(function(){
 
                                   secret = Math.random();
                                   ops = {secret: secret};
-                                  for (x = 0; x < 10; x += 1) {
-                                      name = Math.round(Math.random() * 100);
+                                  for (x = 0; x < 20; x += 1) {
+                                      name = Math.round(Math.random() * 50);
                                       op = Math.random();
                                       if (op > 0.9) {
                                           delete c.root[key].obj[name];
                                           ops[name] = 'delete';
-                                      } else if (op > 0.4 && undefined !== c.root[key].obj[name]) {
-                                          c.root[key].obj[name].modified = secret;
+                                      } else if (op > 0.1 && ({}).hasOwnProperty.call(c.root[key].obj, name)) {
+                                          c.root[key].obj[name].modified.value = secret;
                                           ops[name] = 'modify';
                                       } else {
-                                          c.root[key].obj[name] = c.lift({created: secret,
-                                                                          modified: secret});
+                                          c.root[key].obj[name] = c.lift({});
+                                          c.root[key].obj[name].created = c.lift({value: secret});
+                                          c.root[key].obj[name].modified = c.lift({value: secret});
                                           ops[name] = 'create';
                                       }
                                   }
