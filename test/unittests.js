@@ -19,6 +19,7 @@ function withAtomize (clientsAry, test) {
             var i;
             for (i = 0; i < clientsAry.length; i += 1) {
                 clientsAry[i] = new Atomize(URL);
+                clientsAry[i].stm.prefix = "(c" + i + "): ";
                 if (0 === i) {
                     clientsAry[i].onAuthenticated = function () {
                         test(key, clientsAry, function () {
@@ -659,7 +660,6 @@ $(document).ready(function(){
                           // We use all but one client, and each of those gets 10
                           // txns concurrently
                           for (x = 1; x < clients.length; x += 1) {
-                              clients[x].stm.prefix = "(" + x + "): ";
                               for (y = 0; y < clientConcurrency; y += 1) {
                                   semaphore.up();
                                   fun(clients[x]);
@@ -763,7 +763,6 @@ $(document).ready(function(){
                           // We use all but one client, and each of those gets 10
                           // txns concurrently
                           for (x = 1; x < clients.length; x += 1) {
-                              clients[x].stm.prefix = "(" + x + "): ";
                               for (y = 0; y < clientConcurrency; y += 1) {
                                   semaphore.up();
                                   fun(clients[x], 0);
