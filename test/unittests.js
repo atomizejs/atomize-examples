@@ -98,12 +98,11 @@ $(document).ready(function(){
         });
     });
 
-    asyncTest("Await private empty root", 2, function () {
+    asyncTest("Await private empty root", 1, function () {
         withAtomize(clients(1), function (key, clients, cont) {
             var c1 = clients[0];
             c1.atomically(function () {
                 if (undefined === c1.root[key]) {
-                    ok(true, "We should retry at least once");
                     c1.retry();
                 }
                 return Object.keys(c1.root[key]).length;
