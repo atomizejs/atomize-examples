@@ -330,6 +330,8 @@ $(document).ready(function(){
                     undefined === c2.root[key].field) {
                     c2.retry();
                 }
+                // need to ensure we read deep
+                Cereal.stringify(c2.root[key].field);
                 return c2.root[key].field;
             }, function (result) {
                 deepEqual(result, value, "Should have got back value");
@@ -358,6 +360,8 @@ $(document).ready(function(){
                     undefined === c2.root[key].field) {
                     c2.retry();
                 }
+                // need to ensure we read deep
+                Cereal.stringify(c2.root[key].field);
                 return c2.root[key].field;
             }, function (result) {
                 deepEqual(result, value, "Should have got back value");
