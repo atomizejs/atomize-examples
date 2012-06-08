@@ -47,7 +47,7 @@ cont = function (writer) {
     }
 };
 function start () {
-    atomize = new Atomize("http://localhost:9999/atomize");
+    atomize = new Atomize();
     atomize.onAuthenticated = function () {
         atomize.atomically(function () {
             if ((undefined === atomize.access(atomize.root, "obj")) || (undefined === atomize.access(atomize.access(atomize.root, "obj"), "x"))) {

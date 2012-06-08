@@ -1,15 +1,12 @@
 // atomize-translate unittests.js unittests-compat.js atomize '$(document)' NiceException Error
 
-var URL = "http://localhost:9999/atomize";
-
-
 function NiceException() {};
 NiceException.prototype = Error.prototype;
 
 var niceException = new NiceException();
 
 function withAtomize (clientsAry, test) {
-    var atomize = new Atomize(URL);
+    var atomize = new Atomize();
     atomize.onAuthenticated = function () {
         atomize.atomically(function () {
             var key = Date();
@@ -18,7 +15,7 @@ function withAtomize (clientsAry, test) {
         }, function (key) {
             var i;
             for (i = 0; i < clientsAry.length; i += 1) {
-                clientsAry[i] = new Atomize(URL);
+                clientsAry[i] = new Atomize();
                 clientsAry[i].stm.prefix = "(c" + i + "): ";
                 if (0 === i) {
                     clientsAry[i].onAuthenticated = function () {

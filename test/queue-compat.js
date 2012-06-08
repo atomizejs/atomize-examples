@@ -106,7 +106,7 @@ function debug () {
     setTimeout("log();", 1000);
 }
 function start () {
-    atomize = new Atomize("http://localhost:9999/atomize");
+    atomize = new Atomize();
     atomize.onAuthenticated = function () {
         atomize.atomically(function () {
             if (undefined === atomize.access(atomize.root, "queueWriter")) {

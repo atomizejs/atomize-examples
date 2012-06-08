@@ -1,7 +1,7 @@
 // atomize-translate retry.js retry-compat.js atomize console
-
+var atomize;
 function start() {
-    var atomize = new Atomize("http://localhost:9999/atomize");
+    atomize = new Atomize();
     atomize.onAuthenticated = function () {
         atomize.atomically(function () {
             if (undefined === atomize.root.retryDecider) {
@@ -25,7 +25,7 @@ function start() {
                     if (undefined === atomize.root.notified) {
                         atomize.retry();
                     } else {
-                        return atomize.root.notified.toString();
+                        return "" + atomize.root.notified;
                     }
                 }
             }, function (result) {

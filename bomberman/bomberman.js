@@ -748,10 +748,9 @@ function doKeyDown (event) {
 }
 
 function init () {
-    atomize = new Atomize("http://localhost:9999/atomize");
+    atomize = new Atomize();
     canvas = document.getElementById("game_canvas");
     initCanvas();
-
     atomize.onAuthenticated = function () {
         atomize.atomically(
             function () {
