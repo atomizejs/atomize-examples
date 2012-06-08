@@ -1,16 +1,49 @@
 /*global process, require */
 /*jslint devel: true */
 
-var http = require('http');
+var express = require('express');
 var atomize = require('atomize-server');
-var httpServer = http.createServer();
+var path = require('path');
+var app = express.createServer();
 var port = 9999;
 var port_index = process.argv.indexOf('--port');
 if (port_index > -1) {
     port = process.argv[port_index + 1];
 }
 
-var atomizeServer = atomize.create(httpServer, '[/]atomize');
+app.configure(function(){
+    app.use(express.logger('dev'));
+    app.use(app.router);
+    app.use(express.static(__dirname));
+});
+
+function serveJS (fileName, packageName) {
+    var p;
+    try {
+        p = require.resolve(packageName);
+        p = path.dirname(p);
+        p = path.join(path.join(p, 'lib'), fileName);
+    } catch (err) {
+        p = require.resolve('atomize-server');
+        p = path.dirname(p);
+        p = path.join(
+                path.join(
+                    path.join(
+                        path.join(p, 'node_modules'),
+                        packageName),
+                    'lib'),
+                fileName);
+    }
+    app.get('/' + fileName, function (req, res) {
+        res.sendfile(p);
+    });
+}
+
+serveJS('atomize.js', 'atomize-client');
+serveJS('cereal.js',  'cereal');
+serveJS('compat.js',  'atomize-client');
+
+var atomizeServer = atomize.create(app, '[/]atomize');
 var atomizeClient = atomizeServer.client();
 
 atomizeClient.atomically(function () {
@@ -44,9 +77,10 @@ atomizeClient.atomically(function () {
         }); */
 
         console.log("New connection id: " + client.connection.id);
+        // disable this next line if you want to do some sort of real auth
         client.isAuthenticated = true;
     });
 });
 
 console.log(" [*] Listening on 0.0.0.0:" + port);
-httpServer.listen(port, '0.0.0.0');
+app.listen(port);
