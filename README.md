@@ -3,12 +3,11 @@
 This repository contains some tests and some examples of using
 AtomizeJS.
 
-All of these examples require an AtomizeJS server running on
-`localhost`. The simplest way to achieve that is to `npm install
-atomize-server` and run then `node --harmony-collections
---harmony-proxies app.js` where `app.js` is found in this repository.
-Note that by default, it is expected the AtomizeJS server is listening
-on `localhost` port `9999`.
+The simplest way to get these up and running is:
+
+    git clone https://github.com/atomizejs/atomize-examples.git
+    npm install ./atomize-examples
+    sh $(npm bin)/atomize-examples-server
 
 Please see the main [AtomizeJS site](http://atomizejs.github.com/) for
 further details.
