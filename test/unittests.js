@@ -1,4 +1,4 @@
-// atomize-translate unittests.js unittests-compat.js atomize '$(document)' NiceException Error
+// atomize-translate unittests.js unittests-compat.js atomize '$(document)' NiceException Error Semaphore
 
 function NiceException() {};
 NiceException.prototype = Error.prototype;
@@ -599,6 +599,53 @@ $(document).ready(function(){
                     c2.retry();
                 }
                 c2.root[key].a = 1;
+            });
+        });
+    });
+
+    asyncTest("Nested retries", 3, function () {
+        withAtomize(clients(2), function (key, clients, cont) {
+            var c1 = clients[0],
+                c2 = clients[1];
+            c1.atomically(function () {
+                if (undefined === c1.root[key]) {
+                    c1.retry();
+                }
+                c1.atomically(function () {
+                    if (undefined === c1.root[key].foo) {
+                        c1.retry(); // when this restarts, the outer thing will restart too
+                    }
+                    delete c1.root[key].foo;
+                    c1.root[key].bar = c1.lift({});
+                }, function () {
+                    // still in a txn here; and the previous txn
+                    // doesn't commit until our parent commits.
+                });
+            }, function () {
+                ok(true, "Reached 1");
+                c1.atomically(function () {
+                    if (undefined === c1.root[key].baz) {
+                        c1.retry();
+                    }
+                }, function () {
+                    contAndStart(cont);
+                });
+            });
+            c2.atomically(function () {
+                if (undefined === c2.root[key]) {
+                    c2.retry();
+                }
+                c2.root[key].foo = c2.lift({});
+            }, function () {
+                ok(true, "Reached 2");
+                c2.atomically(function () {
+                    if ('foo' in c2.root[key]) {
+                        c2.retry();
+                    }
+                    c2.root[key].baz = c2.lift({});
+                }, function () {
+                    ok(true, "Reached 3");
+                });
             });
         });
     });
