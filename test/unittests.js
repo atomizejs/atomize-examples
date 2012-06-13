@@ -204,8 +204,7 @@ $(document).ready(function(){
             var c1 = clients[0],
                 c2 = clients[1],
                 trigger1 = "pop!",
-                trigger2 = "!pop";
-
+                trigger2 = undefined;
             c1.atomically(function () {
                 if (undefined === c1.root[key] ||
                     undefined === c1.root[key].trigger) {
@@ -370,24 +369,59 @@ $(document).ready(function(){
     // For some reason, the current Proxy thing suggests all
     // descriptors should be configurable. Thus we don't test for the
     // 'configurable' meta-property here. This issue should go away
-    // once "direct proxies" arrive.
-    asyncTest("Keys, Enumerate, etc", 10, function () {
+    // once "direct proxies" arrive. However, our implementation of
+    // defineProperty does respect the configurable property, and
+    // correspondingly, we must set it true if we hope to be able to
+    // modify it later on.
+    asyncTest("Keys, Enumerate, etc", 16, function () {
         withAtomize(clients(2), function (key, clients, cont) {
             var c1 = clients[0],
                 c2 = clients[1],
                 descriptors = {a: {value: 1,
                                    writable: true,
-                                   enumerable: true},
+                                   enumerable: true,
+                                   configurable: true},
                                b: {value: 2,
                                    writable: false,
-                                   enumerable: true},
+                                   enumerable: true,
+                                   configurable: true},
                                c: {value: 3,
                                    writable: true,
-                                   enumerable: false},
+                                   enumerable: false,
+                                   configurable: true},
                                d: {value: 4,
                                    writable: false,
-                                   enumerable: false}};
-
+                                   enumerable: false,
+                                   configurable: true},
+                               e: {value: undefined,
+                                   writable: true,
+                                   enumerable: true,
+                                   configurable: true},
+                               f: {value: undefined,
+                                   writable: false,
+                                   enumerable: true,
+                                   configurable: true},
+                               g: {value: undefined,
+                                   writable: true,
+                                   enumerable: false,
+                                   configurable: true},
+                               h: {value: undefined,
+                                   writable: false,
+                                   enumerable: false,
+                                   configurable: true}},
+                attemptSet = function (obj, field, success) {
+                    var old = obj[field];
+                    obj[field] = 'foo';
+                    if (success) {
+                        if ('foo' !== obj[field]) {
+                            throw "Excepted write on field " + field + " to work. It didn't.";
+                        }
+                    } else {
+                        if (old !== obj[field]) {
+                            throw "Excepted write on field " + field + " to fail. It didn't fail.";
+                        }
+                    }
+                };
             c1.atomically(function () {
                 if (undefined === c1.root[key]) {
                     c1.retry();
@@ -400,6 +434,26 @@ $(document).ready(function(){
                     Object.defineProperty(c1.root[key], field, descriptor);
                 }
                 c1.root[key].done = true;
+            }, function () {
+                c1.atomically(function () {
+                    if (c1.root[key].done) {
+                        c1.retry();
+                    }
+                    return {a: Object.getOwnPropertyDescriptor(c1.root[key], 'a'),
+                            b: Object.getOwnPropertyDescriptor(c1.root[key], 'b')};
+                }, function (descs) {
+                    deepEqual(descs.a, {configurable: true,
+                                        enumerable: true,
+                                        writable: false,
+                                        value: 'foo'},
+                             "Descriptor of 'a' was not modified correctly");
+                    deepEqual(descs.b, {configurable: true,
+                                        enumerable: false,
+                                        writable: true,
+                                        value: 2},
+                             "Descriptor of 'b' was not modified correctly");
+                    contAndStart(cont);
+                });
             });
             c2.atomically(function () {
                 if (undefined === c2.root[key] ||
@@ -418,34 +472,57 @@ $(document).ready(function(){
                 for (x = 0; x < names.length; x += 1) {
                     field = names[x];
                     descriptors[field] = Object.getOwnPropertyDescriptor(c2.root[key], field);
-                    delete descriptors[field].configurable; // see comment above
                 }
+                attemptSet(c2.root[key], 'a', true);
+                attemptSet(c2.root[key], 'b', false);
+                attemptSet(c2.root[key], 'c', true);
+                attemptSet(c2.root[key], 'd', false);
+                attemptSet(c2.root[key], 'e', true);
+                attemptSet(c2.root[key], 'f', false);
+                attemptSet(c2.root[key], 'g', true);
+                attemptSet(c2.root[key], 'h', false);
+                // just going to modify individual properties to check
+                // they get communicated
+                Object.defineProperty(c2.root[key], 'a', {writable: false});
+                Object.defineProperty(c2.root[key], 'b', {enumerable: false});
+                // demonstrate that nested txns get merged correctly
+                // with parent mods of descriptors
+                c2.atomically(function () {
+                    Object.defineProperty(c2.root[key], 'b', {writable: true});
+                });
                 return {keys: keys.sort(),
                         names: names.sort(),
                         enumerable: enumerable.sort(),
                         descriptors: descriptors,
                         hasA: 'a' in c2.root[key],
                         hasC: 'c' in c2.root[key],
+                        hasE: 'e' in c2.root[key],
+                        hasG: 'g' in c2.root[key],
                         hasZ: 'z' in c2.root[key],
                         hasOwnA: ({}).hasOwnProperty.call(c2.root[key], 'a'),
                         hasOwnC: ({}).hasOwnProperty.call(c2.root[key], 'c'),
+                        hasOwnE: ({}).hasOwnProperty.call(c2.root[key], 'e'),
+                        hasOwnG: ({}).hasOwnProperty.call(c2.root[key], 'g'),
                         hasOwnZ: ({}).hasOwnProperty.call(c2.root[key], 'z')};
             }, function (result) {
-                deepEqual(result.keys, ['a', 'b'],
+                deepEqual(result.keys, ['a', 'b', 'e', 'f'],
                           "Keys should have found enumerable fields");
-                deepEqual(result.enumerable, ['a', 'b'],
+                deepEqual(result.enumerable, ['a', 'b', 'e', 'f'],
                           "Enumeration should have found enumerable fields");
-                deepEqual(result.names, ['a', 'b', 'c', 'd'],
-                          "Should have found field names 'a' to 'd'");
+                deepEqual(result.names, ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'],
+                          "Should have found field names 'a' to 'h'");
                 deepEqual(result.descriptors, descriptors,
                           "Should have got same descriptors back");
                 ok(result.hasA, "Should have found field 'a'");
                 ok(result.hasC, "Should have found field 'c'");
+                ok(result.hasE, "Should have found field 'e'");
+                ok(result.hasG, "Should have found field 'g'");
                 ok(! result.hasZ, "Should not have found field 'z'");
                 ok(result.hasOwnA, "Should have found own field 'a'");
                 ok(result.hasOwnC, "Should have found own field 'c'");
+                ok(result.hasOwnE, "Should have found own field 'e'");
+                ok(result.hasOwnG, "Should have found own field 'g'");
                 ok(! result.hasOwnZ, "Should not have found own field 'z'");
-                contAndStart(cont);
             });
         });
     });
@@ -615,7 +692,7 @@ $(document).ready(function(){
                     if (undefined === c1.root[key].foo) {
                         c1.retry(); // when this restarts, the outer thing will restart too
                     }
-                    delete c1.root[key].foo;
+                    delete c1.root[key].foo.field;
                     c1.root[key].bar = c1.lift({});
                 }, function () {
                     // still in a txn here; and the previous txn
@@ -635,11 +712,11 @@ $(document).ready(function(){
                 if (undefined === c2.root[key]) {
                     c2.retry();
                 }
-                c2.root[key].foo = c2.lift({});
+                c2.root[key].foo = c2.lift({field: true});
             }, function () {
                 ok(true, "Reached 2");
                 c2.atomically(function () {
-                    if ('foo' in c2.root[key]) {
+                    if ('field' in c2.root[key].foo) {
                         c2.retry();
                     }
                     c2.root[key].baz = c2.lift({});
