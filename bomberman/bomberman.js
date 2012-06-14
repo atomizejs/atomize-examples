@@ -621,10 +621,10 @@ Bomberman.prototype = {
                 }
                 return atomize.lift({type: "player", dead: false});
             }, function (me) {
+                self.me = new Player(self, me);
                 self.watchGrid();
                 self.watchPlayers();
                 self.watchBombs();
-                self.me = new Player(self, me);
                 atomize.atomically(function () {
                     self.raw.players.eventCount += 1;
                     self.raw.players.players[self.raw.players.eventCount] = me;

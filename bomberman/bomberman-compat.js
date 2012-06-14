@@ -523,10 +523,10 @@ Bomberman.prototype = {width: 25, height: 25, dropBomb: function (x, y, bomb, co
         }
         return atomize.lift({type: "player", dead: false});
     }, function (me) {
+        atomize.assign(self, "me", new Player(self, me));
         atomize.access(self, "watchGrid")();
         atomize.access(self, "watchPlayers")();
         atomize.access(self, "watchBombs")();
-        atomize.assign(self, "me", new Player(self, me));
         atomize.atomically(function () {
             atomize.assign(atomize.access(atomize.access(self, "raw"), "players"), "eventCount", atomize.access(atomize.access(atomize.access(self, "raw"), "players"), "eventCount") + 1);
             atomize.assign(atomize.access(atomize.access(atomize.access(self, "raw"), "players"), "players"), atomize.access(atomize.access(atomize.access(self, "raw"), "players"), "eventCount"), me);
