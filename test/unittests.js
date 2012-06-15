@@ -743,7 +743,6 @@ $(document).ready(function(){
                 c2 = clients[1],
                 sem = new Semaphore(function () {contAndStart(cont);});
             sem.up();sem.up();
-            c1.logging(true);
             c1.atomically(function () {
                 if (undefined === c1.root[key]) {
                     c1.retry();
