@@ -366,6 +366,46 @@ $(document).ready(function(){
         });
     });
 
+    asyncTest("Send and manipulate Array", 3, function () {
+        withAtomize(clients(3), function (key, clients, cont) {
+            var c1 = clients[0],
+                c2 = clients[1];
+                c3 = clients[2];
+            c1.atomically(function () {
+                if (undefined === c1.root[key]) {
+                    c1.retry();
+                }
+                c1.root[key].ary = c1.lift(['a']);
+                c1.root[key].ary.push('b');
+                c1.root[key].done = true;
+                return c1.root[key].ary.length;
+            }, function (len) {
+                strictEqual(len, 2, "Array should have length 2");
+            });
+            c2.atomically(function () {
+                if (undefined === c2.root[key] ||
+                    ! ('done' in c2.root[key])) {
+                    c2.retry();
+                }
+                delete c2.root[key].done;
+                return c2.root[key].ary.shift();
+            }, function (value) {
+                strictEqual(value, 'a', "Should have shifted out value 'a'");
+            });
+            c3.atomically(function () {
+                if (undefined === c3.root[key] ||
+                    (! ('ary' in c3.root[key])) ||
+                    c3.root[key].ary.length > 1) {
+                    c3.retry();
+                }
+                return Object.keys(c3.root[key].ary);
+            }, function (keys) {
+                deepEqual(keys, ['0'], "Array should only have key '0'");
+                contAndStart(cont);
+            });
+        });
+    });
+
     // For some reason, the current Proxy thing suggests all
     // descriptors should be configurable. Thus we don't test for the
     // 'configurable' meta-property here. This issue should go away
