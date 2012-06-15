@@ -16,7 +16,7 @@ function withAtomize (clientsAry, test) {
             var i;
             for (i = 0; i < clientsAry.length; i += 1) {
                 clientsAry[i] = new Atomize();
-                clientsAry[i].stm.prefix = "(c" + i + "): ";
+                clientsAry[i].stm.prefix = "(c" + i + "):";
                 if (0 === i) {
                     clientsAry[i].onAuthenticated = function () {
                         test(key, clientsAry, function () {
@@ -204,7 +204,9 @@ $(document).ready(function(){
             var c1 = clients[0],
                 c2 = clients[1],
                 trigger1 = "pop!",
-                trigger2 = undefined;
+                trigger2 = undefined,
+                sem = new Semaphore(function () {contAndStart(cont);});
+            sem.up(); sem.up();
             c1.atomically(function () {
                 if (undefined === c1.root[key] ||
                     undefined === c1.root[key].trigger) {
@@ -218,6 +220,7 @@ $(document).ready(function(){
                 }
             }, function (success) {
                 ok(success, "Reached 1");
+                sem.down();
             });
 
             c2.atomically(function () {
@@ -237,7 +240,7 @@ $(document).ready(function(){
                     }
                 }, function () {
                     ok(true, "Reached 3");
-                    contAndStart(cont);
+                    sem.down();
                 });
             });
         });
@@ -247,8 +250,9 @@ $(document).ready(function(){
         withAtomize(clients(2), function (key, clients, cont) {
             var c1 = clients[0],
                 c2 = clients[1],
-                trigger = "pop!";
-
+                trigger = "pop!",
+                sem = new Semaphore(function () {contAndStart(cont);});
+            sem.up(); sem.up();
             c1.atomically(function () {
                 if (undefined === c1.root[key] ||
                     undefined === c1.root[key].trigger) {
@@ -257,6 +261,7 @@ $(document).ready(function(){
                 delete c1.root[key].trigger;
             }, function () {
                 ok(true, "Reached 1");
+                sem.down();
             });
 
             c2.atomically(function () {
@@ -276,7 +281,7 @@ $(document).ready(function(){
                     }
                 }, function () {
                     ok(true, "Reached 3");
-                    contAndStart(cont);
+                    sem.down();
                 });
             });
         });
@@ -370,7 +375,9 @@ $(document).ready(function(){
         withAtomize(clients(3), function (key, clients, cont) {
             var c1 = clients[0],
                 c2 = clients[1];
-                c3 = clients[2];
+                c3 = clients[2],
+                sem = new Semaphore(function () {contAndStart(cont);});
+            sem.up();sem.up();sem.up();
             c1.atomically(function () {
                 if (undefined === c1.root[key]) {
                     c1.retry();
@@ -381,6 +388,7 @@ $(document).ready(function(){
                 return c1.root[key].ary.length;
             }, function (len) {
                 strictEqual(len, 2, "Array should have length 2");
+                sem.down();
             });
             c2.atomically(function () {
                 if (undefined === c2.root[key] ||
@@ -391,6 +399,7 @@ $(document).ready(function(){
                 return c2.root[key].ary.shift();
             }, function (value) {
                 strictEqual(value, 'a', "Should have shifted out value 'a'");
+                sem.down();
             });
             c3.atomically(function () {
                 if (undefined === c3.root[key] ||
@@ -401,7 +410,7 @@ $(document).ready(function(){
                 return Object.keys(c3.root[key].ary);
             }, function (keys) {
                 deepEqual(keys, ['0'], "Array should only have key '0'");
-                contAndStart(cont);
+                sem.down();
             });
         });
     });
@@ -461,7 +470,9 @@ $(document).ready(function(){
                             throw "Excepted write on field " + field + " to fail. It didn't fail.";
                         }
                     }
-                };
+                },
+                sem = new Semaphore(function () {contAndStart(cont);});
+            sem.up();sem.up();
             c1.atomically(function () {
                 if (undefined === c1.root[key]) {
                     c1.retry();
@@ -492,7 +503,7 @@ $(document).ready(function(){
                                         writable: true,
                                         value: 2},
                              "Descriptor of 'b' was not modified correctly");
-                    contAndStart(cont);
+                    sem.down();
                 });
             });
             c2.atomically(function () {
@@ -563,6 +574,7 @@ $(document).ready(function(){
                 ok(result.hasOwnE, "Should have found own field 'e'");
                 ok(result.hasOwnG, "Should have found own field 'g'");
                 ok(! result.hasOwnZ, "Should not have found own field 'z'");
+                sem.down();
             });
         });
     });
@@ -570,7 +582,9 @@ $(document).ready(function(){
     asyncTest("Triggers: Multiple concurrent retries, multiple clients", 6, function () {
         withAtomize(clients(2), function (key, clients, cont) {
             var c1 = clients[0],
-                c2 = clients[1];
+                c2 = clients[1],
+                sem = new Semaphore(function () {contAndStart(cont);});
+            sem.up();sem.up();sem.up();sem.up();
             c1.atomically(function () {
                 if (undefined === c1.root[key] ||
                     undefined === c1.root[key].ready) {
@@ -579,6 +593,7 @@ $(document).ready(function(){
                 c1.root[key].ready = ! c1.root[key].ready; // 2. Flip it false to true
             }, function () {
                 ok(true, "Reached 1");
+                sem.down();
             });
             // We do the 'gone' thing because otherwise c1's txns can
             // create and remove it, before c2 spots its
@@ -593,6 +608,7 @@ $(document).ready(function(){
                 c1.root[key].gone = true;
             }, function () {
                 ok(true, "Reached 2");
+                sem.down();
             });
             c2.atomically(function () {
                 if (undefined === c2.root[key] ||
@@ -610,7 +626,7 @@ $(document).ready(function(){
                     delete c2.root[key].gone;
                 }, function () {
                     ok(true, "Reached 4");
-                    contAndStart(cont); // C. All done
+                    sem.down(); // C. All done
                 });
             });
             c2.atomically(function () {
@@ -620,6 +636,7 @@ $(document).ready(function(){
                 c2.root[key].ready = false; // 1. Create it as false
             }, function () {
                 ok(true, "Reached 5");
+                sem.down();
             });
         });
     });
@@ -723,7 +740,10 @@ $(document).ready(function(){
     asyncTest("Nested retries", 3, function () {
         withAtomize(clients(2), function (key, clients, cont) {
             var c1 = clients[0],
-                c2 = clients[1];
+                c2 = clients[1],
+                sem = new Semaphore(function () {contAndStart(cont);});
+            sem.up();sem.up();
+            c1.logging(true);
             c1.atomically(function () {
                 if (undefined === c1.root[key]) {
                     c1.retry();
@@ -745,7 +765,7 @@ $(document).ready(function(){
                         c1.retry();
                     }
                 }, function () {
-                    contAndStart(cont);
+                    sem.down();
                 });
             });
             c2.atomically(function () {
@@ -762,6 +782,7 @@ $(document).ready(function(){
                     c2.root[key].baz = c2.lift({});
                 }, function () {
                     ok(true, "Reached 3");
+                    sem.down();
                 });
             });
         });
