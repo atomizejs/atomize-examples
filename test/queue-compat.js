@@ -1,79 +1,39 @@
 // atomize-translate queue.js queue-compat.js atomize console
 
-var registered = false, created = false, myPos, writer, next = 0, value, atomize;
-function create (e, cont) {
-    if (created) {
-        cont(false);
-    } else {
-        atomize.atomically(function () {
-            if (undefined === atomize.access(atomize.root, "queue")) {
-                atomize.assign(atomize.root, "queue", atomize.lift({}));
-            }
-            if (undefined === atomize.access(atomize.access(atomize.root, "queue"), "head")) {
-                atomize.assign(atomize.access(atomize.root, "queue"), "head", atomize.lift({val: atomize.lift(e), next: atomize.lift({})}));
-                return true;
-            } else {
-                return false;
-            }
-        }, function (c) {
-            if (c) {
-                created = true;
-            }
-            cont(c);
-        });
-    }
-}
+var myPos, writer, next = 0, value, atomize;
 function enqueue (e, cont) {
-    create(e, function (c) {
-        if (c) {
-            cont();
-        } else {
-            atomize.atomically(function () {
-                var obj = atomize.access(atomize.access(atomize.access(atomize.root, "queue"), "head"), "next");
-                atomize.assign(obj, "next", atomize.lift({}));
-                atomize.assign(obj, "val", atomize.lift(e));
-                atomize.assign(atomize.access(atomize.root, "queue"), "head", atomize.access(atomize.access(atomize.access(atomize.root, "queue"), "head"), "next"));
-            }, function (result) {
-                cont();
-            });
+    atomize.atomically(function () {
+        var obj = atomize.lift({val: e});
+        if (atomize.has(atomize.root, "queue")) {
+            atomize.assign(atomize.access(atomize.root, "queue"), "next", obj);
         }
-    });
-}
-function register (cont) {
-    if (registered) {
+        atomize.assign(atomize.root, "queue", obj);
+    }, function (result) {
         cont();
-    } else {
-        atomize.atomically(function () {
-            if (undefined === atomize.access(atomize.root, "queue")) {
-                atomize.assign(atomize.root, "queue", atomize.lift({}));
-            }
-        }, function (result) {
-            registered = true;
-            atomize.atomically(function () {
-                if (undefined === atomize.access(atomize.access(atomize.root, "queue"), "head")) {
-                    atomize.retry();
-                }
-                if (undefined === myPos) {
-                    myPos = atomize.access(atomize.access(atomize.root, "queue"), "head");
-                }
-            }, function (result) {
-                cont();
-            });
-        });
-    }
+    });
 }
 function dequeue (cont) {
-    register(function () {
+    if (undefined === myPos) {
         atomize.atomically(function () {
-            var result;
-            if (!atomize.access(atomize.access({}, "hasOwnProperty"), "call")(myPos, "val")) {
+            if (!atomize.has(atomize.root, "queue")) {
                 atomize.retry();
             }
-            result = atomize.access(myPos, "val");
-            myPos = atomize.access(myPos, "next");
-            return result;
-        }, cont);
-    });
+            return [atomize.access(atomize.root, "queue"), atomize.access(atomize.access(atomize.root, "queue"), "val")];
+        }, function (elem) {
+            myPos = atomize.access(elem, 0);
+            cont(atomize.access(elem, 1));
+        });
+    } else {
+        atomize.atomically(function () {
+            if (!atomize.has(myPos, "next")) {
+                atomize.retry();
+            }
+            return [atomize.access(myPos, "next"), atomize.access(atomize.access(myPos, "next"), "val")];
+        }, function (elem) {
+            myPos = atomize.access(elem, 0);
+            cont(atomize.access(elem, 1));
+        });
+    }
 }
 function write () {
     enqueue(next, function (e) {
