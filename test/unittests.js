@@ -16,7 +16,7 @@ function withAtomize (clientsAry, test) {
             var i;
             for (i = 0; i < clientsAry.length; i += 1) {
                 clientsAry[i] = new Atomize();
-                clientsAry[i].stm.prefix = "(c" + i + "):";
+                clientsAry[i].setLogPrefix("(c" + i + "):");
                 if (0 === i) {
                     clientsAry[i].onAuthenticated = function () {
                         test(key, clientsAry, function () {

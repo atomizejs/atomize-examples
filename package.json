@@ -4,7 +4,7 @@
     "private": true,
     "dependencies": {
         "express"        : ">=2.5.9",
-        "atomize-server" : ">=0.4.14"
+        "atomize-server" : ">=0.4.16"
     },
     "bin": {
         "atomize-examples-server": "./app.js"
