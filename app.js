@@ -4,9 +4,11 @@
 /*jslint devel: true */
 
 var express = require('express');
+var http = require('http');
 var atomize = require('atomize-server');
 var path = require('path');
-var app = express.createServer();
+var app = express();
+var httpServer = http.createServer(app);
 var port = 9999;
 var port_index = process.argv.indexOf('--port');
 if (port_index > -1) {
@@ -45,7 +47,7 @@ serveJS('atomize.js', 'atomize-client');
 serveJS('cereal.js',  'cereal');
 serveJS('compat.js',  'atomize-client');
 
-var atomizeServer = atomize.create(app, '[/]atomize');
+var atomizeServer = atomize.create(httpServer, '[/]atomize');
 var atomizeClient = atomizeServer.client();
 
 atomizeClient.atomically(function () {
@@ -85,4 +87,4 @@ atomizeClient.atomically(function () {
 });
 
 console.log(" [*] Listening on 0.0.0.0:" + port);
-app.listen(port);
+httpServer.listen(port);
